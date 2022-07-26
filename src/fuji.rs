@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::string::FromUtf8Error;
 
 use crate::common::ImageFile;
-use crate::helpers::{bytes_to_integer, bytes_to_string};
+use crate::helpers::{bytes_to_integer_be, bytes_to_string};
 
 const FORMAT_RANGE: Range<usize> = 0..16;
 const VERSION_RANGE: Range<usize> = 16..20;
@@ -35,27 +35,27 @@ fn debug_info(bytes: &Vec<u8>) {
     );
     println!(
         "JPEG_OFFSET_RANGE {:?}",
-        bytes_to_integer(bytes, JPEG_OFFSET_RANGE)
+        bytes_to_integer_be(bytes, JPEG_OFFSET_RANGE)
     );
     println!(
         "JPEG_LENGTH_RANGE {:?}",
-        bytes_to_integer(bytes, JPEG_LENGTH_RANGE)
+        bytes_to_integer_be(bytes, JPEG_LENGTH_RANGE)
     );
     println!(
         "CFA_HEADER_OFFSET_RANGE {:?}",
-        bytes_to_integer(bytes, CFA_HEADER_OFFSET_RANGE)
+        bytes_to_integer_be(bytes, CFA_HEADER_OFFSET_RANGE)
     );
     println!(
         "CFA_HEADER_LENGTH_RANGE {:?}",
-        bytes_to_integer(bytes, CFA_HEADER_LENGTH_RANGE)
+        bytes_to_integer_be(bytes, CFA_HEADER_LENGTH_RANGE)
     );
     println!(
         "CFA_OFFSET_RANGE {:?}",
-        bytes_to_integer(bytes, CFA_OFFSET_RANGE)
+        bytes_to_integer_be(bytes, CFA_OFFSET_RANGE)
     );
     println!(
         "CFA_LENGTH_RANGE {:?}",
-        bytes_to_integer(bytes, CFA_LENGTH_RANGE)
+        bytes_to_integer_be(bytes, CFA_LENGTH_RANGE)
     );
 }
 
