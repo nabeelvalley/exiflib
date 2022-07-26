@@ -8,7 +8,6 @@ fn parse_path(args: Vec<String>) -> String {
     return resolved.expect("path was not provided").to_string();
 }
 
-// https://libopenraw.freedesktop.org/
 fn main() {
     let resolved = parse_path(env::args().collect());
 
