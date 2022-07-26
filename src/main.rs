@@ -15,7 +15,5 @@ fn main() {
 
     let result = crate::fuji::parse(&file);
 
-    let result = result.unwrap();
-
-    println!("{} {}", result.format, result.model);
+    println!("{:?}", result.unwrap());
 }
