@@ -1,4 +1,4 @@
-use raw::fuji;
+use rawlib::fuji;
 use std::env;
 use std::fs;
 
