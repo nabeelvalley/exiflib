@@ -2,12 +2,13 @@ use std::ops::Range;
 use std::string::FromUtf8Error;
 
 use crate::common::ImageFile;
-use crate::helpers::bytes_to_string;
+use crate::helpers::{bytes_to_integer, bytes_to_string};
 
 const FORMAT_RANGE: Range<usize> = 0..16;
 const VERSION_RANGE: Range<usize> = 16..20;
 const IDENTIFIER_RANGE: Range<usize> = 20..28;
 const MODEL_RANGE: Range<usize> = 28..60;
+const OFFSET_DIRECTORY_VERSION: Range<usize> = 60..64;
 const JPEG_OFFSET_RANGE: Range<usize> = 84..88;
 const JPEG_LENGTH_RANGE: Range<usize> = 88..92;
 const CFA_HEADER_OFFSET_RANGE: Range<usize> = 92..96;
@@ -15,17 +16,51 @@ const CFA_HEADER_LENGTH_RANGE: Range<usize> = 96..100;
 const CFA_OFFSET_RANGE: Range<usize> = 100..104;
 const CFA_LENGTH_RANGE: Range<usize> = 104..108;
 
-pub fn parse(file: &Vec<u8>) -> Result<ImageFile, ()> {
-    let model = parse_model(file);
-    let format = bytes_to_string(file, FORMAT_RANGE);
-    let identifier = bytes_to_string(file, IDENTIFIER_RANGE);
-    let version = bytes_to_string(file, VERSION_RANGE);
+pub fn parse(bytes: &Vec<u8>) -> Result<ImageFile, ()> {
+    let model = parse_model(bytes);
+    let format = bytes_to_string(bytes, FORMAT_RANGE);
+    let identifier = bytes_to_string(bytes, IDENTIFIER_RANGE);
+    let version = bytes_to_string(bytes, VERSION_RANGE);
+
+    debug_info(&bytes);
 
     build_image_file(format, model, identifier, version)
 }
 
-fn parse_model(file: &Vec<u8>) -> Result<String, FromUtf8Error> {
-    let parsed = bytes_to_string(file, MODEL_RANGE);
+// TODO: remove this obviously
+fn debug_info(bytes: &Vec<u8>) {
+    println!(
+        "OFFSET_DIRECTORY_VERSION {:?}",
+        bytes_to_string(bytes, OFFSET_DIRECTORY_VERSION)
+    );
+    println!(
+        "JPEG_OFFSET_RANGE {:?}",
+        bytes_to_integer(bytes, JPEG_OFFSET_RANGE)
+    );
+    println!(
+        "JPEG_LENGTH_RANGE {:?}",
+        bytes_to_integer(bytes, JPEG_LENGTH_RANGE)
+    );
+    println!(
+        "CFA_HEADER_OFFSET_RANGE {:?}",
+        bytes_to_integer(bytes, CFA_HEADER_OFFSET_RANGE)
+    );
+    println!(
+        "CFA_HEADER_LENGTH_RANGE {:?}",
+        bytes_to_integer(bytes, CFA_HEADER_LENGTH_RANGE)
+    );
+    println!(
+        "CFA_OFFSET_RANGE {:?}",
+        bytes_to_integer(bytes, CFA_OFFSET_RANGE)
+    );
+    println!(
+        "CFA_LENGTH_RANGE {:?}",
+        bytes_to_integer(bytes, CFA_LENGTH_RANGE)
+    );
+}
+
+fn parse_model(bytes: &Vec<u8>) -> Result<String, FromUtf8Error> {
+    let parsed = bytes_to_string(bytes, MODEL_RANGE);
 
     match parsed {
         Ok(name) => {
