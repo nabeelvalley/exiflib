@@ -1,7 +1,8 @@
+use std::fs::{self, File};
 use std::ops::Range;
 
-use crate::common::ImageFile;
-use crate::helpers::{bytes_to_string, bytes_to_usize_be};
+use crate::common::{ImageFile, Jpeg};
+use crate::helpers::{bytes_to_string, bytes_to_u32_be};
 
 const FORMAT_RANGE: Range<usize> = 0..16;
 const VERSION_RANGE: Range<usize> = 16..20;
@@ -16,31 +17,33 @@ const CFA_OFFSET_RANGE: Range<usize> = 100..104;
 const CFA_LENGTH_RANGE: Range<usize> = 104..108;
 
 pub fn parse(bytes: &Vec<u8>) -> Option<ImageFile> {
-    let model = parse_model(bytes);
-    let format = parse_format(bytes);
-    let identifier = parse_identifier(bytes);
-    let version = parse_version(bytes);
-
-    let _ = parse_jpeg(bytes);
-
     debug_info(&bytes);
 
+    let model = parse_model(bytes)?;
+    let format = parse_format(bytes)?;
+    let identifier = parse_identifier(bytes)?;
+    let version = parse_version(bytes)?;
+    let jpeg = parse_jpeg(bytes)?;
+
     Some(ImageFile {
-        format: format?,
-        identifier: identifier?,
-        model: model?,
-        version: version?,
+        format,
+        identifier,
+        model,
+        version,
+        jpeg,
     })
 }
 
-fn parse_jpeg(bytes: &Vec<u8>) -> Option<String> {
-    let offset = bytes_to_usize_be(bytes, JPEG_OFFSET_RANGE)?;
+fn parse_jpeg(raw_bytes: &Vec<u8>) -> Option<Jpeg> {
+    let offset = bytes_to_u32_be(raw_bytes, JPEG_OFFSET_RANGE)? as usize;
 
-    let length = bytes_to_usize_be(bytes, JPEG_LENGTH_RANGE)?;
+    let length = bytes_to_u32_be(raw_bytes, JPEG_LENGTH_RANGE)? as usize;
 
     let range = offset..(offset + length);
 
-    bytes_to_string(bytes, range)
+    let bytes = raw_bytes[range].to_vec();
+
+    Some(Jpeg { bytes })
 }
 
 // TODO: remove this obviously
@@ -51,27 +54,27 @@ fn debug_info(bytes: &Vec<u8>) {
     );
     println!(
         "JPEG_OFFSET_RANGE {:?}",
-        bytes_to_usize_be(bytes, JPEG_OFFSET_RANGE)
+        bytes_to_u32_be(bytes, JPEG_OFFSET_RANGE)
     );
     println!(
         "JPEG_LENGTH_RANGE {:?}",
-        bytes_to_usize_be(bytes, JPEG_LENGTH_RANGE)
+        bytes_to_u32_be(bytes, JPEG_LENGTH_RANGE)
     );
     println!(
         "CFA_HEADER_OFFSET_RANGE {:?}",
-        bytes_to_usize_be(bytes, CFA_HEADER_OFFSET_RANGE)
+        bytes_to_u32_be(bytes, CFA_HEADER_OFFSET_RANGE)
     );
     println!(
         "CFA_HEADER_LENGTH_RANGE {:?}",
-        bytes_to_usize_be(bytes, CFA_HEADER_LENGTH_RANGE)
+        bytes_to_u32_be(bytes, CFA_HEADER_LENGTH_RANGE)
     );
     println!(
         "CFA_OFFSET_RANGE {:?}",
-        bytes_to_usize_be(bytes, CFA_OFFSET_RANGE)
+        bytes_to_u32_be(bytes, CFA_OFFSET_RANGE)
     );
     println!(
         "CFA_LENGTH_RANGE {:?}",
-        bytes_to_usize_be(bytes, CFA_LENGTH_RANGE)
+        bytes_to_u32_be(bytes, CFA_LENGTH_RANGE)
     );
 }
 

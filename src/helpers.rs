@@ -4,8 +4,8 @@ pub fn bytes_to_string(bytes: &[u8], range: Range<usize>) -> Option<String> {
     String::from_utf8(bytes[range].to_vec()).ok()
 }
 
-pub fn bytes_to_usize_be(bytes: &[u8], range: Range<usize>) -> Option<usize> {
+pub fn bytes_to_u32_be(bytes: &[u8], range: Range<usize>) -> Option<u32> {
     let u_bytes = bytes[range].try_into().ok()?;
 
-    Some(usize::from_be_bytes(u_bytes))
+    Some(u32::from_be_bytes(u_bytes))
 }
