@@ -15,5 +15,5 @@ fn main() {
 
     let result = crate::fuji::parse(&file);
 
-    println!("{:?}", result.unwrap());
+    println!("{:?}", result.expect("result does not exist"));
 }
