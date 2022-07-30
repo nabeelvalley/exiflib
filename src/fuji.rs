@@ -18,9 +18,9 @@ const CFA_LENGTH_RANGE: Range<usize> = 104..108;
 
 pub fn parse(bytes: &Vec<u8>) -> Result<ImageFile, ()> {
     let model = parse_model(bytes);
-    let format = bytes_to_string(bytes, FORMAT_RANGE);
-    let identifier = bytes_to_string(bytes, IDENTIFIER_RANGE);
-    let version = bytes_to_string(bytes, VERSION_RANGE);
+    let format = parse_format(bytes);
+    let identifier = parse_identifier(bytes);
+    let version = parse_version(bytes);
 
     debug_info(&bytes);
 
@@ -92,4 +92,16 @@ fn build_image_file(
         }),
         _ => Err(()),
     }
+}
+
+fn parse_version(bytes: &Vec<u8>) -> Result<String, FromUtf8Error> {
+    bytes_to_string(bytes, VERSION_RANGE)
+}
+
+fn parse_identifier(bytes: &Vec<u8>) -> Result<String, FromUtf8Error> {
+    bytes_to_string(bytes, IDENTIFIER_RANGE)
+}
+
+fn parse_format(bytes: &Vec<u8>) -> Result<String, FromUtf8Error> {
+    bytes_to_string(bytes, FORMAT_RANGE)
 }
