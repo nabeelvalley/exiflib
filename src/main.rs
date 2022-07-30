@@ -5,7 +5,7 @@ use std::fs;
 fn parse_path(args: Vec<String>) -> String {
     let resolved = args.get(1);
 
-    return resolved.expect("path was not provided").to_string();
+    resolved.expect("path was not provided").to_string()
 }
 
 fn main() {

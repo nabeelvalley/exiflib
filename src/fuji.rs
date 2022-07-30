@@ -1,4 +1,3 @@
-use std::fs::{self, File};
 use std::ops::Range;
 
 use crate::common::{ImageFile, Jpeg};
@@ -16,8 +15,8 @@ const CFA_HEADER_LENGTH_RANGE: Range<usize> = 96..100;
 const CFA_OFFSET_RANGE: Range<usize> = 100..104;
 const CFA_LENGTH_RANGE: Range<usize> = 104..108;
 
-pub fn parse(bytes: &Vec<u8>) -> Option<ImageFile> {
-    debug_info(&bytes);
+pub fn parse(bytes: &[u8]) -> Option<ImageFile> {
+    debug_info(bytes);
 
     let model = parse_model(bytes)?;
     let format = parse_format(bytes)?;
@@ -34,7 +33,7 @@ pub fn parse(bytes: &Vec<u8>) -> Option<ImageFile> {
     })
 }
 
-fn parse_jpeg(raw_bytes: &Vec<u8>) -> Option<Jpeg> {
+fn parse_jpeg(raw_bytes: &[u8]) -> Option<Jpeg> {
     let offset = bytes_to_u32_be(raw_bytes, JPEG_OFFSET_RANGE)? as usize;
 
     let length = bytes_to_u32_be(raw_bytes, JPEG_LENGTH_RANGE)? as usize;
@@ -47,7 +46,7 @@ fn parse_jpeg(raw_bytes: &Vec<u8>) -> Option<Jpeg> {
 }
 
 // TODO: remove this obviously
-fn debug_info(bytes: &Vec<u8>) {
+fn debug_info(bytes: &[u8]) {
     println!(
         "OFFSET_DIRECTORY_VERSION {:?}",
         bytes_to_string(bytes, OFFSET_DIRECTORY_VERSION)
@@ -78,20 +77,20 @@ fn debug_info(bytes: &Vec<u8>) {
     );
 }
 
-fn parse_model(bytes: &Vec<u8>) -> Option<String> {
+fn parse_model(bytes: &[u8]) -> Option<String> {
     let parsed = bytes_to_string(bytes, MODEL_RANGE);
 
-    Some(parsed?.replace("\0", ""))
+    Some(parsed?.replace('\0', ""))
 }
 
-fn parse_version(bytes: &Vec<u8>) -> Option<String> {
+fn parse_version(bytes: &[u8]) -> Option<String> {
     bytes_to_string(bytes, VERSION_RANGE)
 }
 
-fn parse_identifier(bytes: &Vec<u8>) -> Option<String> {
+fn parse_identifier(bytes: &[u8]) -> Option<String> {
     bytes_to_string(bytes, IDENTIFIER_RANGE)
 }
 
-fn parse_format(bytes: &Vec<u8>) -> Option<String> {
+fn parse_format(bytes: &[u8]) -> Option<String> {
     bytes_to_string(bytes, FORMAT_RANGE)
 }
