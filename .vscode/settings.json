@@ -1,4 +1,4 @@
 {
-  "cSpell.words": ["rawlib"],
+  "cSpell.words": ["Exif", "rawlib"],
   "rust-analyzer.checkOnSave.command": "clippy"
 }
