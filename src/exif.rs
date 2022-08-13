@@ -49,7 +49,8 @@ pub enum ExifValue<'a> {
 
 pub struct Exif<'a> {
     pub bytes: &'a [u8],
-    /// There are potentially multiple of these but I'm just handling the single case
+    /// IFD starting at either MM or II
+    /// > There are potentially multiple of these but I'm just handling the single case
     pub ifd: &'a [u8],
     endian: Endian,
 }
@@ -119,7 +120,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
     let length = components * bytes_per_component;
 
-    let value = if length > 4 {
+    let value = if length <= 4 {
         let data = entry.get(8..12)?;
 
         parse_tag_value(&format, endian, data)?
@@ -127,7 +128,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
         // the value needs to be checked at the offset and used from there
         let offset = u32::from_endian_bytes(endian, entry.get(8..)?)?;
         let start = offset as usize;
-        let end = offset as usize;
+        let end = (offset + length) as usize;
 
         let range = start..end;
 
@@ -191,6 +192,7 @@ pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<ExifTa
             let end = start + entry_size;
 
             // TODO: move the entry locating into the parse_entry function
+
             parse_entry(endian, ifd, &ifd[start..end])
         })
         .collect();
