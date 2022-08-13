@@ -37,17 +37,10 @@ fn process_jpeg(file: &[u8], resolved: String) {
     println!("entries");
 
     if let Some(entries) = exif.get_entries() {
-        for i in 0..entries.len() {
-            println!("{:?}", entries[i]);
-            let exif_value_path = format!("{}.{}.exif_value", resolved, i);
-            let exif_value_bytes = &entries[i].entry;
-            fs::write(exif_value_path, exif_value_bytes).expect("error writing exif value")
-        }
+        entries.iter().for_each(|entry| {
+            println!("0x{:x} {:?}", entry.tag, entry);
+        });
     }
-
-    let width = exif::get_tag_value(&exif, exif::ExifTagID::ImageWidth);
-
-    println!("width: {:?}", width);
 
     let exif_path = format!("{}.exif", resolved);
     let exif_bytes = &exif.bytes;
