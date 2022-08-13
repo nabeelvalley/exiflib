@@ -1,5 +1,6 @@
+use rawlib::common;
+use rawlib::exif;
 use rawlib::fuji;
-use rawlib::jpeg;
 use std::env;
 use std::fs;
 
@@ -21,13 +22,16 @@ fn main() {
 
     let file = fs::read(&resolved).unwrap();
 
+    // get some metadata from jpeg
     if (is_jpeg) {
         println!("check some exif data");
 
-        let width = jpeg::parse_tag_value(jpeg::ExifTagID::ImageWidth, &file);
+        let width = exif::parse_tag_value(exif::ExifTagID::ImageWidth, &file, exif::Endian::Big);
 
         println!("width: {:?}", width);
-    } else {
+    }
+    // do some parsing if not jpeg/create jpeg extract
+    else {
         let result = crate::fuji::parse(&file).expect("result does not exist");
 
         println!(
