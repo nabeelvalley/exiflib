@@ -1,7 +1,6 @@
 use rawlib::exif;
 use rawlib::fuji;
 use std::env;
-use std::fmt::LowerHex;
 use std::fs;
 
 fn parse_path(args: Vec<String>) -> String {

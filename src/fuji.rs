@@ -24,7 +24,6 @@ pub fn parse(bytes: &[u8]) -> Option<ImageFile> {
     let identifier = parse_identifier(bytes)?;
     let version = parse_version(bytes)?;
     let jpeg = parse_jpeg(bytes)?;
-    let cfa = parse_cfa(bytes)?;
 
     Some(ImageFile {
         format,

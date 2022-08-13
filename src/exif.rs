@@ -1,7 +1,5 @@
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
-#[macro_use]
-use crate::helpers;
 use crate::helpers::{
     bytes_to_string, full_bytes_to_string, get_sequence_offset, Endian, EndianRead,
 };
@@ -57,19 +55,10 @@ pub struct Exif<'a> {
 }
 
 #[derive(Debug)]
-pub struct RawTag<'a> {
+pub struct ExifTag<'a> {
     pub tag: u16,
     pub format: TagFormat,
-    pub components: u32,
-    pub entry: &'a [u8],
-    pub bytes_per_component: u32,
-}
-
-pub struct ExifTag {
-    pub id: ExifTagID,
-    pub name: String,
-    /// to simplify usage we will always return the value as a string
-    pub value: String,
+    pub value: ExifValue<'a>,
 }
 
 /// 6 bytes identify the EXIF data start = `Exif\x00\x00`
@@ -119,7 +108,7 @@ fn get_ifd_bytes<'a>(endian: &Endian, exif: &'a [u8]) -> Option<&'a [u8]> {
     Some(&exif[start..])
 }
 
-fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<RawTag<'a>> {
+fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag<'a>> {
     let tag = u16::from_endian_bytes(endian, entry)?;
     let components = u32::from_endian_bytes(endian, entry.get(4..)?)?;
 
@@ -128,19 +117,12 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
     let bytes_per_component = get_bytes_per_component(&format);
 
-    let tag = RawTag {
-        entry,
-        tag,
-        format,
-        components,
-        bytes_per_component,
-    };
-
     let length = components * bytes_per_component;
 
-    if (length > 4) {
-        let data = entry.get(8..12);
-        // the value is the data as parsed (need to implement parsing)
+    let value = if length > 4 {
+        let data = entry.get(8..12)?;
+
+        parse_tag_value(&format, endian, data)?
     } else {
         // the value needs to be checked at the offset and used from there
         let offset = u32::from_endian_bytes(endian, entry.get(8..)?)?;
@@ -149,10 +131,12 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
         let range = start..end;
 
-        let value_bytes = &ifd[range];
+        let value_bytes = ifd.get(range)?;
 
-        let value = 1;
-    }
+        parse_tag_value(&format, endian, value_bytes)?
+    };
+
+    let tag = ExifTag { tag, format, value };
 
     Some(tag)
 }
@@ -192,7 +176,7 @@ fn get_bytes_per_component(format: &TagFormat) -> u32 {
     }
 }
 
-pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<RawTag<'a>>> {
+pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<ExifTag<'a>>> {
     // the first two bytes are the record count
     let count_range_end = 2;
     let entry_size = 12;
@@ -201,17 +185,38 @@ pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<RawTag
 
     let count = u16::from_endian_bytes(endian, count_bytes)?;
 
-    let entries: Vec<RawTag<'a>> = (0..count)
+    let entries: Vec<ExifTag<'a>> = (0..count)
         .filter_map(|c| {
             let start = count_range_end + ((c as usize) * entry_size);
             let end = start + entry_size;
 
             // TODO: move the entry locating into the parse_entry function
-            parse_entry(endian, &ifd, &ifd[start..end])
+            parse_entry(endian, ifd, &ifd[start..end])
         })
         .collect();
 
     Some(entries)
+}
+
+fn parse_tag_value<'a>(
+    format: &TagFormat,
+    endian: &'a Endian,
+    bytes: &'a [u8],
+) -> Option<ExifValue<'a>> {
+    match format {
+        TagFormat::UnsignedByte => parse_unsigned_byte(endian, bytes),
+        TagFormat::AsciiString => parse_ascii_string(bytes),
+        TagFormat::UnsignedShort => parse_unsigned_short(endian, bytes),
+        TagFormat::UnsignedLong => parse_unsigned_long(endian, bytes),
+        TagFormat::UnsignedRational => parse_unsigned_rational(endian, bytes),
+        TagFormat::SignedByte => parse_signed_byte(endian, bytes),
+        TagFormat::Undefined => parse_undefined(bytes),
+        TagFormat::SignedShort => parse_signed_short(endian, bytes),
+        TagFormat::SignedLong => parse_signed_long(endian, bytes),
+        TagFormat::SignedRational => parse_signed_rational(endian, bytes),
+        TagFormat::SingleFloat => parse_single_float(endian, bytes),
+        TagFormat::DoubleFloat => parse_double_float(endian, bytes),
+    }
 }
 
 fn parse_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
@@ -220,7 +225,7 @@ fn parse_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue
     Some(ExifValue::UnsignedByte(value))
 }
 
-fn parse_ascii_string<'a>(bytes: &'a [u8]) -> Option<ExifValue<'a>> {
+fn parse_ascii_string(bytes: &[u8]) -> Option<ExifValue> {
     let value = full_bytes_to_string(bytes)?;
 
     Some(ExifValue::AsciiString(value))
@@ -254,7 +259,7 @@ fn parse_signed_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'
     Some(ExifValue::SignedByte(value))
 }
 
-fn parse_undefined<'a>(bytes: &'a [u8]) -> Option<ExifValue<'a>> {
+fn parse_undefined(bytes: &[u8]) -> Option<ExifValue> {
     Some(ExifValue::Undefined(bytes))
 }
 
@@ -294,7 +299,7 @@ fn parse_double_float<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<
 
 // TODO: remove this or better organize the rest of the code into the impl
 impl<'a> Exif<'a> {
-    pub fn get_entries(&self) -> Option<Vec<RawTag>> {
+    pub fn get_entries(&self) -> Option<Vec<ExifTag>> {
         let endian = &self.endian;
         let ifd = self.ifd;
 
