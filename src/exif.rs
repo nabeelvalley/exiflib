@@ -1,8 +1,9 @@
 use std::ops::Range;
 
-use crate::helpers::{bytes_to_string, bytes_to_u32_be, get_subsequence_offset};
+use crate::helpers::{bytes_to_string, bytes_to_u16, bytes_to_u32, get_subsequence_offset, Endian};
 
 /// EXIF Tag IDs from https://exiftool.org/TagNames/EXIF.html
+/// Offsets are from the start of the Endian Marker (MM or II)
 pub enum ExifTagID {
     /// u32
     ImageWidth = 0x100,
@@ -18,52 +19,137 @@ pub enum ExifValue {
     String(String),
 }
 
-pub struct ExifTag {
-    id: ExifTagID,
-    name: String,
-    /// to simplify usage we will always return the value as a string
-    value: String,
+pub struct Exif<'a> {
+    pub bytes: &'a [u8],
+    /// There are potentially multiple of these but I'm just handling the single case
+    pub ifd: &'a [u8],
+    endian: Endian,
 }
 
-pub enum Endian {
-    Big,
-    Little,
+#[derive(Debug)]
+pub struct RawTag<'a> {
+    pub entry: &'a [u8],
+    pub tag: &'a [u8],
+    pub format: &'a [u8],
+    pub components: &'a [u8],
+    pub data: &'a [u8],
+}
+
+pub struct ExifTag {
+    pub id: ExifTagID,
+    pub name: String,
+    /// to simplify usage we will always return the value as a string
+    pub value: String,
 }
 
 /// 6 bytes identify the EXIF data start = `Exif\x00\x00`
-const EXIF_MARKER: [u8; 6] = [45, 78, 69, 66, 00, 00];
+const EXIF_MARKER: &[u8] = "Exif\0\0".as_bytes();
+const ENDIAN_RANGE: Range<usize> = 6..8;
+const IFD_OFFSET_RANGE: Range<usize> = 10..14;
 
-fn get_start_offset(file: &[u8]) -> Option<usize> {
-    get_subsequence_offset(file, &EXIF_MARKER)
+pub fn parse(file: &[u8]) -> Option<Exif> {
+    let start = get_start(file)?;
+
+    // TODO: get these bytes in a better way
+    let bytes = &file[start..];
+
+    let endian = get_endian(bytes)?;
+    let ifd = get_ifd_bytes(&endian, bytes)?;
+
+    let exif = Exif { ifd, bytes, endian };
+
+    Some(exif)
+}
+
+fn get_marker_start(file: &[u8]) -> Option<usize> {
+    get_subsequence_offset(file, EXIF_MARKER)
 }
 
 fn get_endian(exif: &[u8]) -> Option<Endian> {
-    let range = 6..8;
-    let endian = bytes_to_string(exif, range)?;
+    let endian = bytes_to_string(exif, ENDIAN_RANGE)?;
 
     match endian.as_str() {
         "MM" => Some(Endian::Big),
-        "ll" => Some(Endian::Little),
+        "II" => Some(Endian::Little),
         _ => None,
     }
 }
 
-fn get_u32_value(endian: Endian, exif: &[u8], tag_id: ExifTagID) -> Option<ExifValue> {
-    let result = bytes_to_u32_be(exif, tag_id as usize)?;
-
-    Some(ExifValue::U32(result))
+// TODO: find a way to find the end of this byte range
+fn get_start(file: &[u8]) -> Option<usize> {
+    get_marker_start(file)
 }
 
-// pub fn bytes_to_string_value(bytes: &[u8], tag_id: ExifTagID) -> Option<ExifValue> {
-//     let result = bytes_to_string(bytes, [0..0])?;
+fn get_ifd_bytes<'a>(endian: &Endian, exif: &'a [u8]) -> Option<&'a [u8]> {
+    let offset = bytes_to_u32(endian, exif, IFD_OFFSET_RANGE.start)?;
 
-//     Some(ExifValue::String(result))
-// }
+    // the IFD start is defined as the location from the Endian marker start
+    let start = ENDIAN_RANGE.start + (offset as usize);
 
-pub fn parse_tag_value(tag_id: ExifTagID, exif: &[u8], endian: Endian) -> Option<ExifValue> {
+    Some(&exif[start..])
+}
+
+fn get_u32_value(endian: &Endian, ifd: &[u8], tag_id: ExifTagID) -> Option<ExifValue> {
+    let result = bytes_to_u32(endian, ifd, tag_id as usize);
+    let value = ExifValue::U32(result?);
+
+    Some(value)
+}
+
+pub fn get_tag_value(exif: &Exif, tag_id: ExifTagID) -> Option<ExifValue> {
+    let endian = &exif.endian;
+    let ifd = exif.ifd;
+
     match tag_id {
-        ExifTagID::ImageHeight => get_u32_value(endian, exif, ExifTagID::ImageHeight),
-        ExifTagID::ImageWidth => get_u32_value(endian, exif, ExifTagID::ImageWidth),
-        ExifTagID::Model => get_u32_value(endian, exif, ExifTagID::Model),
+        ExifTagID::ImageHeight => get_u32_value(endian, ifd, ExifTagID::ImageHeight),
+        ExifTagID::ImageWidth => get_u32_value(endian, ifd, ExifTagID::ImageWidth),
+        ExifTagID::Model => get_u32_value(endian, ifd, ExifTagID::Model),
+    }
+}
+
+fn parse_entry(entry: &[u8]) -> Option<RawTag> {
+    let tag = entry.get(0..2)?;
+    let format = entry.get(2..4)?;
+    let components = entry.get(4..8)?;
+    let data = entry.get(8..12)?;
+
+    let tag = RawTag {
+        entry,
+        tag,
+        format,
+        components,
+        data,
+    };
+
+    Some(tag)
+}
+
+pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<RawTag<'a>>> {
+    // the first two bytes are the record count
+    let count_range_end = 2;
+    let entry_size = 12;
+    let count_range = 0..count_range_end;
+    let count_bytes = &ifd[count_range];
+
+    let count = bytes_to_u16(endian, count_bytes, 0)?;
+
+    let entries: Vec<RawTag<'a>> = (0..count)
+        .filter_map(|c| {
+            let start = count_range_end + ((c as usize) * entry_size);
+            let end = start + entry_size;
+
+            parse_entry(&ifd[start..end])
+        })
+        .collect();
+
+    Some(entries)
+}
+
+impl<'a> Exif<'a> {
+    pub fn get_entries(&self) -> Option<Vec<RawTag>> {
+        let endian = &self.endian;
+        let ifd = self.ifd;
+
+        parse_entries(endian, ifd)
     }
 }
