@@ -60,6 +60,9 @@ pub struct ExifTag<'a> {
     pub tag: u16,
     pub format: TagFormat,
     pub value: ExifValue<'a>,
+    pub components: u32,
+    pub bytes_per_component: u32,
+    pub length: u32,
 }
 
 /// 6 bytes identify the EXIF data start = `Exif\x00\x00`
@@ -127,8 +130,10 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
     } else {
         // the value needs to be checked at the offset and used from there
         let offset = u32::from_endian_bytes(endian, entry.get(8..)?)?;
-        let start = offset as usize;
-        let end = (offset + length) as usize;
+        // doing something wrong somewhere which is why this -8 is here. Indicates that we're using
+        // the IFD directory (most likely from the directory start and not the Endian start)
+        let start = (offset - 8) as usize;
+        let end = start + (length) as usize;
 
         let range = start..end;
 
@@ -137,7 +142,14 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
         parse_tag_value(&format, endian, value_bytes)?
     };
 
-    let tag = ExifTag { tag, format, value };
+    let tag = ExifTag {
+        tag,
+        format,
+        value,
+        components,
+        bytes_per_component,
+        length,
+    };
 
     Some(tag)
 }
@@ -191,11 +203,16 @@ pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<ExifTa
             let start = count_range_end + ((c as usize) * entry_size);
             let end = start + entry_size;
 
-            // TODO: move the entry locating into the parse_entry function
-
             parse_entry(endian, ifd, &ifd[start..end])
         })
         .collect();
+
+    let link_range_start = count_range_end + ((count as usize) * entry_size);
+    let link_range = link_range_start..(link_range_start + 4);
+
+    let link = u32::from_endian_bytes(endian, &ifd[link_range]);
+
+    println!("IFD Link: {:?}", link);
 
     Some(entries)
 }
