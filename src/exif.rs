@@ -97,7 +97,7 @@ impl<'a> Exif<'a> {
         let ifd0_count = self.ifd0_count;
         let ifd0_offset = self.ifd0_offset;
 
-        let ifd0_entries = parse_entries(endian, ifd, ifd, ifd0_entry_offset, ifd0_count);
+        let ifd0_entries = parse_entries(endian, ifd, 0, ifd0_entry_offset, ifd0_count);
 
         let sub_ifd_entry = ifd0_entries
             .iter()
@@ -125,7 +125,7 @@ impl<'a> Exif<'a> {
                                 println!("{} sub: {} base: {}", offset, sub_ifd_count, ifd0_count);
 
                                 let sub_ifd_entries =
-                                    parse_entries(endian, bytes, ifd, 2, sub_ifd_count);
+                                    parse_entries(endian, ifd, offset, 2, sub_ifd_count);
 
                                 println!(
                                     "len sub: {} base: {}",
@@ -167,12 +167,7 @@ fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
     exif.get(ENDIAN_RANGE.start..)
 }
 
-fn parse_entry<'a>(
-    endian: &'a Endian,
-    value_ifd: &'a [u8],
-    lookup_ifd: &'a [u8],
-    entry: &'a [u8],
-) -> Option<ExifTag> {
+fn parse_entry<'a>(endian: &'a Endian, lookup_ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag> {
     let tag = u16::from_endian_bytes(endian, entry)?;
     let data = entry.get(8..12)?;
 
@@ -254,19 +249,19 @@ fn get_bytes_per_component(format: &TagFormat) -> u32 {
 
 pub fn parse_entries<'a>(
     endian: &'a Endian,
-    value_ifd: &'a [u8],
     lookup_ifd: &'a [u8],
+    ifd_value_offset: usize,
     ifd0_entry_offset: usize,
     ifd0_count: u16,
 ) -> Vec<ExifTag> {
     let entries: Vec<ExifTag> = (0..ifd0_count)
         .filter_map(|c| {
-            let start = ifd0_entry_offset + ((c as usize) * EXIF_ENTRY_SIZE);
+            let start = ifd_value_offset + ifd0_entry_offset + ((c as usize) * EXIF_ENTRY_SIZE);
             let end = start + EXIF_ENTRY_SIZE;
 
-            let entry_bytes = &value_ifd.get(start..end)?;
+            let entry_bytes = &lookup_ifd.get(start..end)?;
 
-            let entry = parse_entry(endian, value_ifd, lookup_ifd, entry_bytes)?;
+            let entry = parse_entry(endian, lookup_ifd, entry_bytes)?;
 
             println!("result 0x{:x} {:?}", entry.tag, entry.value);
 
