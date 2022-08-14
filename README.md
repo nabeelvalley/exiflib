@@ -15,3 +15,5 @@ Implementation references and guidance for image formats from:
 - [Fujifilm EXIF Viewer](https://greybeard.org.uk/exif3/)
 - [COMPSCI 365/590F - Bit Twiddling File Formats, Parsing EXIF](https://people.cs.umass.edu/~liberato/courses/2018-spring-compsci365+590f/lecture-notes/05-bit-twiddling-file-formats-parsing-exif/)
 - [Description of Exif file format (MIT Media)](https://www.media.mit.edu/pia/Research/deepview/exif.html)
+- [Exif Explanation](http://gvsoft.no-ip.org/exif/exif-explanation.html#ExifIFDTags)
+- [Exif Specification](http://web.archive.org/web/20131019050323/http://www.exif.org/specifications.html)
