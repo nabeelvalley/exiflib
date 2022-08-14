@@ -10,6 +10,7 @@ pub struct Jpeg {
     pub bytes: Vec<u8>,
 }
 
+#[derive(Debug)]
 pub struct RAW {
     pub bytes: Vec<u8>,
 }

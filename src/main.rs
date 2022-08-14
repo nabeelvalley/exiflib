@@ -30,7 +30,7 @@ fn process_raw(file: Vec<u8>, resolved: String) {
     println!("jpeg written to {}", &jpeg_path);
 }
 
-fn process_jpeg(file: &[u8], resolved: String) {
+fn process_jpeg(file: &[u8]) {
     let exif = exif::parse(file).expect("Exif could not be parsed");
 
     println!("entries");
@@ -49,7 +49,7 @@ fn main() {
     let file = fs::read(&resolved).unwrap();
 
     if is_jpeg {
-        process_jpeg(&file, resolved);
+        process_jpeg(&file);
     } else {
         process_raw(file, resolved);
     }
