@@ -11,7 +11,7 @@ const IFD_OFFSET_RANGE: Range<usize> = 10..14;
 /// Each Exif Entry is structured as TTTT FFFF
 const EXIF_ENTRY_SIZE: usize = 12;
 /// Used to locate the SubIFD which contains additional metadata for the image
-const SUB_IFD_TAG_ID: u32 = 0x8769;
+const SUB_IFD_TAG_ID: u16 = 0x8769;
 
 /// EXIF Tag IDs from https://exiftool.org/TagNames/EXIF.html
 /// Offsets are from the start of the Endian Marker (MM or II)
@@ -56,7 +56,7 @@ pub struct Exif<'a> {
 pub struct ExifTag<'a> {
     pub tag: u16,
     pub format: TagFormat,
-    pub value: ExifValue<'a>,
+    pub value: Option<ExifValue<'a>>,
     pub components: u32,
     pub bytes_per_component: u32,
     pub length: u32,
@@ -125,6 +125,7 @@ fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
 
 fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag<'a>> {
     let tag = u16::from_endian_bytes(endian, entry)?;
+    let data = entry.get(8..12)?;
 
     let components = u32::from_offset_endian_bytes(endian, entry, 4)?;
 
@@ -134,8 +135,6 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
     let bytes_per_component = get_bytes_per_component(&format);
 
     let length = components * bytes_per_component;
-
-    let data = entry.get(8..12)?;
 
     let value = if length <= 4 {
         parse_tag_value(&format, endian, data)
@@ -157,7 +156,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
     let tag = ExifTag {
         tag,
         format,
-        value: value?,
+        value,
         components,
         bytes_per_component,
         length,
