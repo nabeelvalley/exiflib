@@ -10,6 +10,8 @@ const ENDIAN_RANGE: Range<usize> = 6..8;
 const IFD_OFFSET_RANGE: Range<usize> = 10..14;
 /// Each Exif Entry is structured as TTTT FFFF
 const EXIF_ENTRY_SIZE: usize = 12;
+/// Used to locate the SubIFD which contains additional metadata for the image
+const SUB_IFD_TAG_ID: u32 = 0x8769;
 
 /// EXIF Tag IDs from https://exiftool.org/TagNames/EXIF.html
 /// Offsets are from the start of the Endian Marker (MM or II)
@@ -42,7 +44,10 @@ pub struct Exif<'a> {
     /// IFD starting at either MM or II
     /// > Offsets within the IFD are calculated relative to this starting point
     ifd: &'a [u8],
-    first_ifd_offset: u32,
+    ifd0_offset: usize,
+    /// The start of the IFD entries (skips past the initial two sizing bytes)
+    ifd0_entry_offset: usize,
+    ifd0_count: u16,
 
     endian: Endian,
 }
@@ -65,13 +70,19 @@ pub fn parse(file: &[u8]) -> Option<Exif> {
 
     let endian = get_endian(bytes)?;
 
-    let first_ifd_offset = get_ifd_first_entry_offset(&endian, bytes)?;
+    let ifd0_offset = get_ifd_first_entry_offset(&endian, bytes)? as usize;
+    let ifd0_entry_offset = ifd0_offset + 2;
+
+    let ifd0_count = u16::from_offset_endian_bytes(&endian, bytes, ifd0_offset)?;
+
     let ifd = get_ifd_bytes(bytes)?;
 
     let exif = Exif {
-        ifd,
         endian,
-        first_ifd_offset,
+        ifd,
+        ifd0_offset,
+        ifd0_count,
+        ifd0_entry_offset,
     };
 
     Some(exif)
@@ -81,9 +92,10 @@ impl<'a> Exif<'a> {
     pub fn get_entries(&self) -> Option<Vec<ExifTag>> {
         let endian = &self.endian;
         let ifd = self.ifd;
-        let first_ifd_offset = self.first_ifd_offset as usize;
+        let ifd0_entry_offset = self.ifd0_entry_offset;
+        let ifd0_count = self.ifd0_count;
 
-        parse_entries(endian, ifd, first_ifd_offset)
+        parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count)
     }
 }
 
@@ -113,6 +125,7 @@ fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
 
 fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag<'a>> {
     let tag = u16::from_endian_bytes(endian, entry)?;
+
     let components = u32::from_offset_endian_bytes(endian, entry, 4)?;
 
     let format_value = u16::from_offset_endian_bytes(endian, entry, 2)?;
@@ -191,35 +204,19 @@ fn get_bytes_per_component(format: &TagFormat) -> u32 {
 pub fn parse_entries<'a>(
     endian: &'a Endian,
     ifd: &'a [u8],
-    first_ifd_offset: usize,
+    ifd0_entry_offset: usize,
+    ifd0_count: u16,
 ) -> Option<Vec<ExifTag<'a>>> {
-    // the first value in the IFD is the count
-    let count_range_end = first_ifd_offset + 2;
-    let count_range = first_ifd_offset..count_range_end;
-
-    let count_bytes = &ifd.get(count_range)?;
-
-    let count = u16::from_endian_bytes(endian, count_bytes)?;
-
-    let entries: Vec<ExifTag<'a>> = (0..count)
+    let entries: Vec<ExifTag<'a>> = (0..ifd0_count)
         .filter_map(|c| {
-            let start = count_range_end + ((c as usize) * EXIF_ENTRY_SIZE);
+            let start = ifd0_entry_offset + ((c as usize) * EXIF_ENTRY_SIZE);
             let end = start + EXIF_ENTRY_SIZE;
 
             parse_entry(endian, ifd, &ifd[start..end])
         })
         .collect();
 
-    println!("{} {count}", &entries.len());
-    let link_range_start = count_range_end + ((count as usize) * EXIF_ENTRY_SIZE);
-    let link_range = link_range_start..(link_range_start + 4);
-
-    let link = u32::from_endian_bytes(endian, &ifd[link_range]);
-
-    match link {
-        Some(l) => println!("IFD Link: 0x{:x}", l),
-        None => println!("No Link"),
-    };
+    println!("{} {}", &entries.len(), ifd0_count);
 
     Some(entries)
 }
