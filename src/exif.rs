@@ -210,12 +210,16 @@ pub fn parse_entries<'a>(
         })
         .collect();
 
+    println!("{} {count}", &entries.len());
     let link_range_start = count_range_end + ((count as usize) * EXIF_ENTRY_SIZE);
     let link_range = link_range_start..(link_range_start + 4);
 
     let link = u32::from_endian_bytes(endian, &ifd[link_range]);
 
-    println!("IFD Link: {:?}", link);
+    match link {
+        Some(l) => println!("IFD Link: 0x{:x}", l),
+        None => println!("No Link"),
+    };
 
     Some(entries)
 }
