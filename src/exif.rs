@@ -4,6 +4,11 @@ use crate::helpers::{
     bytes_to_string, full_bytes_to_string, get_sequence_offset, Endian, EndianRead,
 };
 
+/// 6 bytes identify the EXIF data start = `Exif\x00\x00`
+const EXIF_MARKER: &[u8] = "Exif\0\0".as_bytes();
+const ENDIAN_RANGE: Range<usize> = 6..8;
+const IFD_OFFSET_RANGE: Range<usize> = 10..14;
+
 /// EXIF Tag IDs from https://exiftool.org/TagNames/EXIF.html
 /// Offsets are from the start of the Endian Marker (MM or II)
 pub enum ExifTagID {
@@ -48,10 +53,13 @@ pub enum ExifValue<'a> {
 }
 
 pub struct Exif<'a> {
-    pub bytes: &'a [u8],
+    // EXIF bytes starting from the `Exif` marker
+    bytes: &'a [u8],
     /// IFD starting at either MM or II
-    /// > There are potentially multiple of these but I'm just handling the single case
-    pub ifd: &'a [u8],
+    /// > Offsets within the IFD are calculated relative to this starting point
+    ifd: &'a [u8],
+    first_ifd_offset: u32,
+
     endian: Endian,
 }
 
@@ -65,27 +73,25 @@ pub struct ExifTag<'a> {
     pub length: u32,
 }
 
-/// 6 bytes identify the EXIF data start = `Exif\x00\x00`
-const EXIF_MARKER: &[u8] = "Exif\0\0".as_bytes();
-const ENDIAN_RANGE: Range<usize> = 6..8;
-const IFD_OFFSET_RANGE: Range<usize> = 10..14;
-
 pub fn parse(file: &[u8]) -> Option<Exif> {
-    let start = get_start(file)?;
+    let start = get_exif_start(file)?;
 
     // TODO: get these bytes in a better way
     let bytes = &file[start..];
 
     let endian = get_endian(bytes)?;
-    let ifd = get_ifd_bytes(&endian, bytes)?;
 
-    let exif = Exif { ifd, bytes, endian };
+    let first_ifd_offset = get_ifd_first_entry_offset(&endian, bytes)?;
+    let ifd = get_ifd_bytes(bytes)?;
+
+    let exif = Exif {
+        ifd,
+        bytes,
+        endian,
+        first_ifd_offset,
+    };
 
     Some(exif)
-}
-
-fn get_marker_start(file: &[u8]) -> Option<usize> {
-    get_sequence_offset(file, EXIF_MARKER)
 }
 
 fn get_endian(exif: &[u8]) -> Option<Endian> {
@@ -99,17 +105,17 @@ fn get_endian(exif: &[u8]) -> Option<Endian> {
 }
 
 // TODO: find a way to find the end of this byte range
-fn get_start(file: &[u8]) -> Option<usize> {
-    get_marker_start(file)
+fn get_exif_start(file: &[u8]) -> Option<usize> {
+    get_sequence_offset(file, EXIF_MARKER)
 }
 
-fn get_ifd_bytes<'a>(endian: &Endian, exif: &'a [u8]) -> Option<&'a [u8]> {
-    let offset = u32::from_endian_bytes(endian, exif.get(IFD_OFFSET_RANGE.start..)?)?;
+fn get_ifd_first_entry_offset(endian: &Endian, exif: &[u8]) -> Option<u32> {
+    let bytes = exif.get(IFD_OFFSET_RANGE.start..)?;
+    u32::from_endian_bytes(endian, bytes)
+}
 
-    // the IFD start is defined as the location from the Endian marker start
-    let start = ENDIAN_RANGE.start + (offset as usize);
-
-    Some(&exif[start..])
+fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
+    exif.get(ENDIAN_RANGE.start..)
 }
 
 fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag<'a>> {
@@ -132,7 +138,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
         let offset = u32::from_endian_bytes(endian, entry.get(8..)?)?;
         // doing something wrong somewhere which is why this -8 is here. Indicates that we're using
         // the IFD directory (most likely from the directory start and not the Endian start)
-        let start = (offset - 8) as usize;
+        let start = (offset) as usize;
         let end = start + (length) as usize;
 
         let range = start..end;
@@ -189,11 +195,19 @@ fn get_bytes_per_component(format: &TagFormat) -> u32 {
     }
 }
 
-pub fn parse_entries<'a>(endian: &'a Endian, ifd: &'a [u8]) -> Option<Vec<ExifTag<'a>>> {
-    // the first two bytes are the record count
-    let count_range_end = 2;
+pub fn parse_entries<'a>(
+    endian: &'a Endian,
+    ifd: &'a [u8],
+    first_ifd_offset: usize,
+) -> Option<Vec<ExifTag<'a>>> {
+    println!("{} {:?}", first_ifd_offset, &ifd[0..20]);
+
     let entry_size = 12;
-    let count_range = 0..count_range_end;
+
+    // the first value in the IFD is the count
+    let count_range_end = first_ifd_offset + 2;
+    let count_range = first_ifd_offset..count_range_end;
+
     let count_bytes = &ifd[count_range];
 
     let count = u16::from_endian_bytes(endian, count_bytes)?;
@@ -321,7 +335,8 @@ impl<'a> Exif<'a> {
     pub fn get_entries(&self) -> Option<Vec<ExifTag>> {
         let endian = &self.endian;
         let ifd = self.ifd;
+        let first_ifd_offset = self.first_ifd_offset as usize;
 
-        parse_entries(endian, ifd)
+        parse_entries(endian, ifd, first_ifd_offset)
     }
 }

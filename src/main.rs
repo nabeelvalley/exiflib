@@ -40,14 +40,6 @@ fn process_jpeg(file: &[u8], resolved: String) {
             println!("0x{:x} {:?}", entry.tag, entry);
         });
     }
-
-    let exif_path = format!("{}.exif", resolved);
-    let exif_bytes = &exif.bytes;
-    fs::write(exif_path, exif_bytes).expect("failed to write exif");
-
-    let exif_path_no_header = format!("{}.exif_no_header", resolved);
-    let exif_bytes_no_header = &exif.bytes[6..];
-    fs::write(exif_path_no_header, exif_bytes_no_header).expect("failed to write exif w/o header");
 }
 
 fn main() {
