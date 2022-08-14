@@ -135,29 +135,29 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
     let length = components * bytes_per_component;
 
-    let value = if length <= 4 {
-        let data = entry.get(8..12)?;
+    let data = entry.get(8..12)?;
 
-        parse_tag_value(&format, endian, data)?
+    let value = if length <= 4 {
+        parse_tag_value(&format, endian, data)
     } else {
         // the value needs to be checked at the offset and used from there
-        let offset = u32::from_offset_endian_bytes(endian, entry, 8)?;
-        // doing something wrong somewhere which is why this -8 is here. Indicates that we're using
-        // the IFD directory (most likely from the directory start and not the Endian start)
+        let offset = u32::from_endian_bytes(endian, data)?;
+
         let start = (offset) as usize;
         let end = start + (length) as usize;
 
         let range = start..end;
 
-        let value_bytes = ifd.get(range)?;
+        let value_bytes = &ifd[range];
+        // let value_bytes = ifd.get(range)?;
 
-        parse_tag_value(&format, endian, value_bytes)?
+        parse_tag_value(&format, endian, value_bytes)
     };
 
     let tag = ExifTag {
         tag,
         format,
-        value,
+        value: value?,
         components,
         bytes_per_component,
         length,
@@ -215,8 +215,6 @@ pub fn parse_entries<'a>(
             parse_entry(endian, ifd, &ifd[start..end])
         })
         .collect();
-
-    println!("{} {}", &entries.len(), ifd0_count);
 
     Some(entries)
 }

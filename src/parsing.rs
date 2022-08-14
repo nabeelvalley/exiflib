@@ -33,7 +33,7 @@ pub fn bytes_to_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<Ex
 }
 
 pub fn bytes_to_ascii_string(bytes: &[u8]) -> Option<ExifValue> {
-    let value = full_bytes_to_string(bytes)?;
+    let value = full_bytes_to_string(bytes)?.replace("\0", "");
 
     Some(ExifValue::AsciiString(value))
 }
