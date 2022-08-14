@@ -12,17 +12,7 @@ const IFD_FIRST_ENTRY_OFFSET_RANGE_FROM_ENDIAN_MARKER: Range<usize> = 4..8;
 const EXIF_ENTRY_SIZE: usize = 12;
 /// Used to locate the SubIFD which contains additional metadata for the image
 const SUB_IFD_TAG_ID: u16 = 0x8769;
-
-/// EXIF Tag IDs from https://exiftool.org/TagNames/EXIF.html
-/// Offsets are from the start of the Endian Marker (MM or II)
-pub enum ExifTagID {
-    /// u32
-    ImageWidth = 0x100,
-    /// u32
-    ImageHeight = 0x101,
-    /// String
-    Model = 0x0110,
-}
+const MAKER_NOTE_TAG_ID: u16 = 0x8769;
 
 #[derive(Debug, Clone)]
 pub enum TagFormat {
@@ -49,6 +39,13 @@ pub struct Exif<'a> {
     ifd0_count: u16,
 
     endian: Endian,
+}
+
+#[derive(Debug, Clone)]
+pub enum TagType {
+    IFD0,
+    SubIFD,
+    MakerNote,
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +77,7 @@ pub fn parse(file: &[u8]) -> Option<Exif> {
 }
 
 impl<'a> Exif<'a> {
-    pub fn get_entries(&self) -> Option<Vec<ExifTag>> {
+    pub fn get_entries(&self) -> Vec<(TagType, ExifTag)> {
         let endian = &self.endian;
         let ifd = self.ifd;
         let ifd0_entry_offset = self.ifd0_entry_offset;
@@ -88,39 +85,47 @@ impl<'a> Exif<'a> {
 
         let ifd0_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count);
 
-        let sub_ifd_entry = ifd0_entries
+        let ifd0: Vec<(TagType, ExifTag)> = ifd0_entries
             .iter()
-            .find(|entry| entry.tag == SUB_IFD_TAG_ID);
+            .map(|v| (TagType::IFD0, v.to_owned()))
+            .collect();
 
-        match sub_ifd_entry {
-            None => Some(ifd0_entries),
-            Some(sub_ifd_tag) => {
-                let sub_ifd_offset = match sub_ifd_tag.value {
-                    Some(ExifValue::UnsignedLong(offset)) => Some(offset as usize),
-                    _ => None,
-                };
+        let sub_ifd: Vec<(TagType, ExifTag)> =
+            parse_ifd(&ifd0_entries, ifd, endian, SUB_IFD_TAG_ID)
+                .unwrap_or_default()
+                .iter()
+                .map(|v| (TagType::SubIFD, v.to_owned()))
+                .collect();
 
-                match sub_ifd_offset {
-                    None => Some(ifd0_entries),
-                    Some(offset) => {
-                        let sub_ifd = ifd.get((offset)..);
+        let maker_note: Vec<(TagType, ExifTag)> =
+            parse_ifd(&ifd0_entries, ifd, endian, MAKER_NOTE_TAG_ID)
+                .unwrap_or_default()
+                .iter()
+                .map(|v| (TagType::MakerNote, v.to_owned()))
+                .collect();
 
-                        match sub_ifd {
-                            None => Some(ifd0_entries),
-                            Some(bytes) => {
-                                let sub_ifd_count = u16::from_endian_bytes(endian, bytes)?;
-
-                                let sub_ifd_entries =
-                                    parse_entries(endian, ifd, offset + 2, sub_ifd_count);
-
-                                Some(vec![ifd0_entries, sub_ifd_entries].concat())
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        vec![ifd0, sub_ifd, maker_note].concat()
     }
+}
+
+fn parse_ifd<'a>(
+    ifd0_entries: &[ExifTag],
+    ifd: &'a [u8],
+    endian: &'a Endian,
+    tag_id: u16,
+) -> Option<Vec<ExifTag<'a>>> {
+    let sub_ifd_tag = ifd0_entries.iter().find(|entry| entry.tag == tag_id)?;
+
+    let sub_ifd_offset = match sub_ifd_tag.value {
+        Some(ExifValue::UnsignedLong(offset)) => Some(offset as usize),
+        _ => None,
+    }?;
+
+    let sub_ifd_count = u16::from_endian_bytes(endian, ifd)?;
+
+    let entries = parse_entries(endian, ifd, sub_ifd_offset + 2, sub_ifd_count);
+
+    Some(entries)
 }
 
 fn get_endian(endian_bytes: &[u8]) -> Option<Endian> {
