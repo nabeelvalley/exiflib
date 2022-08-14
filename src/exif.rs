@@ -44,8 +44,6 @@ pub struct Exif<'a> {
     /// IFD starting at either MM or II
     /// > Offsets within the IFD are calculated relative to this starting point
     ifd: &'a [u8],
-    /// The offset to the start of the IFD (including the sizing bytes)
-    ifd0_offset: usize,
     /// The start of the IFD entries (skips past the initial two sizing bytes)
     ifd0_entry_offset: usize,
     ifd0_count: u16,
@@ -54,10 +52,10 @@ pub struct Exif<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExifTag {
+pub struct ExifTag<'a> {
     pub tag: u16,
     pub format: TagFormat,
-    pub value: Option<ExifValue>,
+    pub value: Option<ExifValue<'a>>,
     pub components: u32,
     pub bytes_per_component: u32,
     pub length: u32,
@@ -81,7 +79,6 @@ pub fn parse(file: &[u8]) -> Option<Exif> {
     let exif = Exif {
         endian,
         ifd,
-        ifd0_offset,
         ifd0_count,
         ifd0_entry_offset,
     };
@@ -95,7 +92,6 @@ impl<'a> Exif<'a> {
         let ifd = self.ifd;
         let ifd0_entry_offset = self.ifd0_entry_offset;
         let ifd0_count = self.ifd0_count;
-        let ifd0_offset = self.ifd0_offset;
 
         let ifd0_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count);
 
@@ -106,7 +102,6 @@ impl<'a> Exif<'a> {
         match sub_ifd_entry {
             None => Some(ifd0_entries),
             Some(sub_ifd_tag) => {
-                println!("found sub tag entry {:?}", sub_ifd_tag);
                 let sub_ifd_offset = match sub_ifd_tag.value {
                     Some(ExifValue::UnsignedLong(offset)) => Some(offset as usize),
                     _ => None,
@@ -122,16 +117,8 @@ impl<'a> Exif<'a> {
                             Some(bytes) => {
                                 let sub_ifd_count = u16::from_endian_bytes(endian, bytes)?;
 
-                                println!("{} sub: {} base: {}", offset, sub_ifd_count, ifd0_count);
-
                                 let sub_ifd_entries =
                                     parse_entries(endian, ifd, offset + 2, sub_ifd_count);
-
-                                println!(
-                                    "len sub: {} base: {}",
-                                    sub_ifd_entries.len(),
-                                    ifd0_entries.len()
-                                );
 
                                 Some(vec![ifd0_entries, sub_ifd_entries].concat())
                             }
@@ -167,7 +154,11 @@ fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
     exif.get(ENDIAN_RANGE.start..)
 }
 
-fn parse_entry<'a>(endian: &'a Endian, lookup_ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag> {
+fn parse_entry<'a>(
+    endian: &'a Endian,
+    lookup_ifd: &'a [u8],
+    entry: &'a [u8],
+) -> Option<ExifTag<'a>> {
     let tag = u16::from_endian_bytes(endian, entry)?;
     let data = entry.get(8..12)?;
 
@@ -252,7 +243,7 @@ pub fn parse_entries<'a>(
     lookup_ifd: &'a [u8],
     directory_start_offset: usize,
     ifd0_count: u16,
-) -> Vec<ExifTag> {
+) -> Vec<ExifTag<'a>> {
     let entries: Vec<ExifTag> = (0..ifd0_count)
         .filter_map(|c| {
             let start = directory_start_offset + ((c as usize) * EXIF_ENTRY_SIZE);
@@ -261,8 +252,6 @@ pub fn parse_entries<'a>(
             let entry_bytes = &lookup_ifd.get(start..end)?;
 
             let entry = parse_entry(endian, lookup_ifd, entry_bytes)?;
-
-            println!("result 0x{:x} {:?}", entry.tag, entry.value);
 
             Some(entry)
         })
@@ -275,7 +264,7 @@ fn parse_tag_value<'a>(
     format: &TagFormat,
     endian: &'a Endian,
     bytes: &'a [u8],
-) -> Option<ExifValue> {
+) -> Option<ExifValue<'a>> {
     match format {
         TagFormat::UnsignedByte => parsing::bytes_to_unsigned_byte(endian, bytes),
         TagFormat::AsciiString => parsing::bytes_to_ascii_string(bytes),
@@ -283,7 +272,7 @@ fn parse_tag_value<'a>(
         TagFormat::UnsignedLong => parsing::bytes_to_unsigned_long(endian, bytes),
         TagFormat::UnsignedRational => parsing::bytes_to_unsigned_rational(endian, bytes),
         TagFormat::SignedByte => parsing::bytes_to_signed_byte(endian, bytes),
-        TagFormat::Undefined => Some(ExifValue::Undefined),
+        TagFormat::Undefined => parsing::bytes_to_undefined(bytes),
         TagFormat::SignedShort => parsing::bytes_to_signed_short(endian, bytes),
         TagFormat::SignedLong => parsing::bytes_to_signed_long(endian, bytes),
         TagFormat::SignedRational => parsing::bytes_to_signed_rational(endian, bytes),

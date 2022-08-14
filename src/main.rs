@@ -37,7 +37,7 @@ fn process_jpeg(file: &[u8]) {
 
     if let Some(entries) = exif.get_entries() {
         entries.iter().for_each(|entry| {
-            // println!("0x{:x} {:?}", entry.tag, entry);
+            println!("0x{:x} {:?}", entry.tag, entry.value);
         });
     }
 }

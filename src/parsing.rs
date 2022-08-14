@@ -3,14 +3,14 @@ use std::ops::Range;
 use crate::traits::{Endian, EndianRead};
 
 #[derive(Debug, Clone)]
-pub enum ExifValue {
+pub enum ExifValue<'a> {
     UnsignedByte(u8),
     AsciiString(String),
     UnsignedShort(u16),
     UnsignedLong(u32),
     UnsignedRational(u32, u32),
     SignedByte(i8),
-    Undefined,
+    Undefined(&'a [u8]),
     SignedShort(i16),
     SignedLong(i32),
     SignedRational(i32, i32),
@@ -26,7 +26,7 @@ pub fn full_bytes_to_string(bytes: &[u8]) -> Option<String> {
     String::from_utf8(bytes.to_vec()).ok()
 }
 
-pub fn bytes_to_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = u8::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::UnsignedByte(value))
@@ -38,19 +38,19 @@ pub fn bytes_to_ascii_string(bytes: &[u8]) -> Option<ExifValue> {
     Some(ExifValue::AsciiString(value))
 }
 
-pub fn bytes_to_unsigned_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_unsigned_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = u16::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::UnsignedShort(value))
 }
 
-pub fn bytes_to_unsigned_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_unsigned_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = u32::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::UnsignedLong(value))
 }
 
-pub fn bytes_to_unsigned_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_unsigned_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let num_bytes = bytes.get(0..4)?;
     let den_bytes = bytes.get(4..8)?;
 
@@ -60,29 +60,29 @@ pub fn bytes_to_unsigned_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Optio
     Some(ExifValue::UnsignedRational(numerator, denominator))
 }
 
-pub fn bytes_to_signed_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_signed_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = i8::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SignedByte(value))
 }
 
 pub fn bytes_to_undefined(bytes: &[u8]) -> Option<ExifValue> {
-    Some(ExifValue::Undefined)
+    Some(ExifValue::Undefined(bytes))
 }
 
-pub fn bytes_to_signed_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_signed_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = i16::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SignedShort(value))
 }
 
-pub fn bytes_to_signed_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_signed_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = i32::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SignedLong(value))
 }
 
-pub fn bytes_to_signed_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_signed_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let num_bytes = bytes.get(0..4)?;
     let den_bytes = bytes.get(4..8)?;
 
@@ -92,13 +92,13 @@ pub fn bytes_to_signed_rational<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<
     Some(ExifValue::SignedRational(numerator, denominator))
 }
 
-pub fn bytes_to_single_float<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_single_float<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = f32::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SingleFloat(value))
 }
 
-pub fn bytes_to_double_float<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue> {
+pub fn bytes_to_double_float<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
     let value = f64::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::DoubleFloat(value))
