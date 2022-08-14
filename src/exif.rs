@@ -146,7 +146,8 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
     let bytes_per_component = get_bytes_per_component(&format);
 
-    let length = components * bytes_per_component;
+    // safely multiply since this may yield an overflow
+    let length = components.checked_mul(bytes_per_component)?;
 
     let value = if length <= 4 {
         parse_tag_value(&format, endian, data)?
