@@ -1,5 +1,5 @@
 [package]
-name = "rawlib"
+name = "exiflib"
 version = "0.1.0"
 edition = "2021"
 

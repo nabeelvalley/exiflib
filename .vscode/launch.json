@@ -7,11 +7,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in library 'rawlib'",
+      "name": "Debug unit tests in library 'exiflib'",
       "cargo": {
-        "args": ["test", "--no-run", "--lib", "--package=rawlib"],
+        "args": ["test", "--no-run", "--lib", "--package=exiflib"],
         "filter": {
-          "name": "rawlib",
+          "name": "exiflib",
           "kind": "lib"
         }
       },
@@ -21,11 +21,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'rawlib'",
+      "name": "Debug executable 'exiflib'",
       "cargo": {
-        "args": ["build", "--bin=rawlib", "--package=rawlib"],
+        "args": ["build", "--bin=exiflib", "--package=exiflib"],
         "filter": {
-          "name": "rawlib",
+          "name": "exiflib",
           "kind": "bin"
         }
       },
@@ -35,11 +35,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'rawlib'",
+      "name": "Debug unit tests in executable 'exiflib'",
       "cargo": {
-        "args": ["test", "--no-run", "--bin=rawlib", "--package=rawlib"],
+        "args": ["test", "--no-run", "--bin=exiflib", "--package=exiflib"],
         "filter": {
-          "name": "rawlib",
+          "name": "exiflib",
           "kind": "bin"
         }
       },

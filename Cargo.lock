@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "rawlib"
+name = "exiflib"
 version = "0.1.0"

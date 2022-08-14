@@ -1,4 +1,4 @@
-use rawlib::exif;
+use exiflib::exif;
 use std::env;
 use std::fs;
 
