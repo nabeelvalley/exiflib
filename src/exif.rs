@@ -1,3 +1,4 @@
+use std::fs;
 use std::ops::Range;
 
 use crate::helpers::get_sequence_offset;
@@ -24,7 +25,7 @@ pub enum ExifTagID {
     Model = 0x0110,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TagFormat {
     UnsignedByte,
     AsciiString,
@@ -44,6 +45,8 @@ pub struct Exif<'a> {
     /// IFD starting at either MM or II
     /// > Offsets within the IFD are calculated relative to this starting point
     ifd: &'a [u8],
+    /// The offset to the start of the IFD (including the sizing bytes)
+    ifd0_offset: usize,
     /// The start of the IFD entries (skips past the initial two sizing bytes)
     ifd0_entry_offset: usize,
     ifd0_count: u16,
@@ -51,11 +54,11 @@ pub struct Exif<'a> {
     endian: Endian,
 }
 
-#[derive(Debug)]
-pub struct ExifTag<'a> {
+#[derive(Debug, Clone)]
+pub struct ExifTag {
     pub tag: u16,
     pub format: TagFormat,
-    pub value: ExifValue<'a>,
+    pub value: Option<ExifValue>,
     pub components: u32,
     pub bytes_per_component: u32,
     pub length: u32,
@@ -79,6 +82,7 @@ pub fn parse(file: &[u8]) -> Option<Exif> {
     let exif = Exif {
         endian,
         ifd,
+        ifd0_offset,
         ifd0_count,
         ifd0_entry_offset,
     };
@@ -92,22 +96,54 @@ impl<'a> Exif<'a> {
         let ifd = self.ifd;
         let ifd0_entry_offset = self.ifd0_entry_offset;
         let ifd0_count = self.ifd0_count;
+        let ifd0_offset = self.ifd0_offset;
 
-        let ifd0_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count)?;
+        let ifd0_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count);
 
-        Some(ifd0_entries)
+        let sub_ifd_entry = ifd0_entries
+            .iter()
+            .find(|entry| entry.tag == SUB_IFD_TAG_ID);
 
-        // let sub_ifd_entry = ifd0_entries
-        //     .iter()
-        //     .find(|entry| entry.tag == SUB_IFD_TAG_ID);
+        match sub_ifd_entry {
+            None => Some(ifd0_entries),
+            Some(sub_ifd_tag) => {
+                println!("found sub tag entry {:?}", sub_ifd_tag);
+                let sub_ifd_offset = match sub_ifd_tag.value {
+                    Some(ExifValue::UnsignedLong(offset)) => Some(offset as usize),
+                    _ => None,
+                };
 
-        // match sub_ifd_entry {
-        //     None => Some(ifd0_entries),
-        //     Some(sub_ifd_tag) => {
-        //         let sub_ifd_offset = u32::from_endian_bytes(endian, sub_ifd_tag.value);
-        //         let sub_ifd_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count);
-        //     }
-        // }
+                match sub_ifd_offset {
+                    None => Some(ifd0_entries),
+                    Some(offset) => {
+                        let sub_ifd = ifd.get((offset)..);
+
+                        match sub_ifd {
+                            None => Some(ifd0_entries),
+                            Some(bytes) => {
+                                let sub_ifd_count = u16::from_endian_bytes(endian, bytes)?;
+
+                                println!("{} sub: {} base: {}", offset, sub_ifd_count, ifd0_count);
+
+                                fs::write("sub_ifd.exif", bytes)
+                                    .expect("error writing sub ifd exif");
+
+                                let sub_ifd_entries =
+                                    parse_entries(endian, &ifd[offset..], 2, sub_ifd_count);
+
+                                println!(
+                                    "len sub: {} base: {}",
+                                    sub_ifd_entries.len(),
+                                    ifd0_entries.len()
+                                );
+
+                                Some(vec![ifd0_entries, sub_ifd_entries].concat())
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -135,7 +171,7 @@ fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
     exif.get(ENDIAN_RANGE.start..)
 }
 
-fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag<'a>> {
+fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option<ExifTag> {
     let tag = u16::from_endian_bytes(endian, entry)?;
     let data = entry.get(8..12)?;
 
@@ -150,7 +186,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
     let length = components.checked_mul(bytes_per_component)?;
 
     let value = if length <= 4 {
-        parse_tag_value(&format, endian, data)?
+        parse_tag_value(&format, endian, data)
     } else {
         // the value needs to be checked at the offset and used from there
         let offset = u32::from_endian_bytes(endian, data)?;
@@ -160,9 +196,12 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
         let range = start..end;
 
-        let value_bytes = ifd.get(range)?;
+        let value_bytes = ifd.get(range);
 
-        parse_tag_value(&format, endian, value_bytes)?
+        match value_bytes {
+            None => None,
+            Some(val) => parse_tag_value(&format, endian, val),
+        }
     };
 
     let tag = ExifTag {
@@ -217,24 +256,30 @@ pub fn parse_entries<'a>(
     ifd: &'a [u8],
     ifd0_entry_offset: usize,
     ifd0_count: u16,
-) -> Option<Vec<ExifTag<'a>>> {
-    let entries: Vec<ExifTag<'a>> = (0..ifd0_count)
+) -> Vec<ExifTag> {
+    let entries: Vec<ExifTag> = (0..ifd0_count)
         .filter_map(|c| {
             let start = ifd0_entry_offset + ((c as usize) * EXIF_ENTRY_SIZE);
             let end = start + EXIF_ENTRY_SIZE;
 
-            parse_entry(endian, ifd, &ifd[start..end])
+            let entry_bytes = &ifd.get(start..end)?;
+
+            let entry = parse_entry(endian, ifd, entry_bytes)?;
+
+            println!("result 0x{:x} {:?}", entry.tag, entry.value);
+
+            Some(entry)
         })
         .collect();
 
-    Some(entries)
+    entries
 }
 
 fn parse_tag_value<'a>(
     format: &TagFormat,
     endian: &'a Endian,
     bytes: &'a [u8],
-) -> Option<ExifValue<'a>> {
+) -> Option<ExifValue> {
     match format {
         TagFormat::UnsignedByte => parsing::bytes_to_unsigned_byte(endian, bytes),
         TagFormat::AsciiString => parsing::bytes_to_ascii_string(bytes),
@@ -242,7 +287,7 @@ fn parse_tag_value<'a>(
         TagFormat::UnsignedLong => parsing::bytes_to_unsigned_long(endian, bytes),
         TagFormat::UnsignedRational => parsing::bytes_to_unsigned_rational(endian, bytes),
         TagFormat::SignedByte => parsing::bytes_to_signed_byte(endian, bytes),
-        TagFormat::Undefined => parsing::bytes_to_undefined(bytes),
+        TagFormat::Undefined => Some(ExifValue::Undefined),
         TagFormat::SignedShort => parsing::bytes_to_signed_short(endian, bytes),
         TagFormat::SignedLong => parsing::bytes_to_signed_long(endian, bytes),
         TagFormat::SignedRational => parsing::bytes_to_signed_rational(endian, bytes),
