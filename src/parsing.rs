@@ -6,13 +6,13 @@ use crate::traits::{Endian, EndianRead};
 pub enum ExifValue<'a> {
     UnsignedByte(u8),
     AsciiString(String),
-    UnsignedShort(u32),
-    UnsignedLong(u64),
+    UnsignedShort(u16),
+    UnsignedLong(u32),
     UnsignedRational(u32, u32),
     SignedByte(i8),
     Undefined(&'a [u8]),
-    SignedShort(i32),
-    SignedLong(i64),
+    SignedShort(i16),
+    SignedLong(i32),
     SignedRational(i32, i32),
     SingleFloat(f32),
     DoubleFloat(f64),
@@ -39,13 +39,13 @@ pub fn bytes_to_ascii_string(bytes: &[u8]) -> Option<ExifValue> {
 }
 
 pub fn bytes_to_unsigned_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
-    let value = u32::from_endian_bytes(endian, bytes)?;
+    let value = u16::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::UnsignedShort(value))
 }
 
 pub fn bytes_to_unsigned_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
-    let value = u64::from_endian_bytes(endian, bytes)?;
+    let value = u32::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::UnsignedLong(value))
 }
@@ -71,13 +71,13 @@ pub fn bytes_to_undefined(bytes: &[u8]) -> Option<ExifValue> {
 }
 
 pub fn bytes_to_signed_short<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
-    let value = i32::from_endian_bytes(endian, bytes)?;
+    let value = i16::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SignedShort(value))
 }
 
 pub fn bytes_to_signed_long<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<ExifValue<'a>> {
-    let value = i64::from_endian_bytes(endian, bytes)?;
+    let value = i32::from_endian_bytes(endian, bytes)?;
 
     Some(ExifValue::SignedLong(value))
 }

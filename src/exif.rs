@@ -44,7 +44,6 @@ pub struct Exif<'a> {
     /// IFD starting at either MM or II
     /// > Offsets within the IFD are calculated relative to this starting point
     ifd: &'a [u8],
-    ifd0_offset: usize,
     /// The start of the IFD entries (skips past the initial two sizing bytes)
     ifd0_entry_offset: usize,
     ifd0_count: u16,
@@ -56,7 +55,7 @@ pub struct Exif<'a> {
 pub struct ExifTag<'a> {
     pub tag: u16,
     pub format: TagFormat,
-    pub value: Option<ExifValue<'a>>,
+    pub value: ExifValue<'a>,
     pub components: u32,
     pub bytes_per_component: u32,
     pub length: u32,
@@ -80,7 +79,6 @@ pub fn parse(file: &[u8]) -> Option<Exif> {
     let exif = Exif {
         endian,
         ifd,
-        ifd0_offset,
         ifd0_count,
         ifd0_entry_offset,
     };
@@ -95,7 +93,21 @@ impl<'a> Exif<'a> {
         let ifd0_entry_offset = self.ifd0_entry_offset;
         let ifd0_count = self.ifd0_count;
 
-        parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count)
+        let ifd0_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count)?;
+
+        Some(ifd0_entries)
+
+        // let sub_ifd_entry = ifd0_entries
+        //     .iter()
+        //     .find(|entry| entry.tag == SUB_IFD_TAG_ID);
+
+        // match sub_ifd_entry {
+        //     None => Some(ifd0_entries),
+        //     Some(sub_ifd_tag) => {
+        //         let sub_ifd_offset = u32::from_endian_bytes(endian, sub_ifd_tag.value);
+        //         let sub_ifd_entries = parse_entries(endian, ifd, ifd0_entry_offset, ifd0_count);
+        //     }
+        // }
     }
 }
 
@@ -137,7 +149,7 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
     let length = components * bytes_per_component;
 
     let value = if length <= 4 {
-        parse_tag_value(&format, endian, data)
+        parse_tag_value(&format, endian, data)?
     } else {
         // the value needs to be checked at the offset and used from there
         let offset = u32::from_endian_bytes(endian, data)?;
@@ -147,10 +159,9 @@ fn parse_entry<'a>(endian: &'a Endian, ifd: &'a [u8], entry: &'a [u8]) -> Option
 
         let range = start..end;
 
-        let value_bytes = &ifd[range];
-        // let value_bytes = ifd.get(range)?;
+        let value_bytes = ifd.get(range)?;
 
-        parse_tag_value(&format, endian, value_bytes)
+        parse_tag_value(&format, endian, value_bytes)?
     };
 
     let tag = ExifTag {
