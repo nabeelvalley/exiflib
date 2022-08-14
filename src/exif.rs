@@ -1,13 +1,13 @@
 use std::ops::Range;
 
-use crate::helpers::get_sequence_offset;
+use crate::helpers::get_sequence_range;
 use crate::parsing::{self, ExifValue};
 use crate::traits::{Endian, EndianRead};
 
 /// 6 bytes identify the EXIF data start = `Exif\x00\x00`
 const EXIF_MARKER: &[u8] = "Exif\0\0".as_bytes();
-const ENDIAN_RANGE: Range<usize> = 6..8;
-const IFD_OFFSET_RANGE: Range<usize> = 10..14;
+const ENDIAN_RANGE_FROM_EXIF_MARKER: Range<usize> = 6..8;
+const IFD_FIRST_ENTRY_OFFSET_RANGE_FROM_ENDIAN_MARKER: Range<usize> = 4..8;
 /// Each Exif Entry is structured as TTTT FFFF
 const EXIF_ENTRY_SIZE: usize = 12;
 /// Used to locate the SubIFD which contains additional metadata for the image
@@ -62,19 +62,12 @@ pub struct ExifTag<'a> {
 }
 
 pub fn parse(file: &[u8]) -> Option<Exif> {
-    let start = get_exif_start(file)?;
+    let (endian, ifd) = get_exif_bytes(file)?;
 
-    // TODO: There's probably a way we can find the end of the exif header
-    let bytes = file.get(start..)?;
-
-    let endian = get_endian(bytes)?;
-
-    let ifd0_offset = get_ifd_first_entry_offset(&endian, bytes)? as usize;
+    let ifd0_offset = get_ifd_first_entry_offset(&endian, ifd)? as usize;
     let ifd0_entry_offset = ifd0_offset + 2;
 
-    let ifd0_count = u16::from_offset_endian_bytes(&endian, bytes, ifd0_offset)?;
-
-    let ifd = get_ifd_bytes(bytes)?;
+    let ifd0_count = u16::from_offset_endian_bytes(&endian, ifd, ifd0_offset)?;
 
     let exif = Exif {
         endian,
@@ -130,8 +123,8 @@ impl<'a> Exif<'a> {
     }
 }
 
-fn get_endian(exif: &[u8]) -> Option<Endian> {
-    let endian = parsing::bytes_to_string(exif, ENDIAN_RANGE)?;
+fn get_endian(endian_bytes: &[u8]) -> Option<Endian> {
+    let endian = parsing::full_bytes_to_string(endian_bytes)?;
 
     match endian.as_str() {
         "MM" => Some(Endian::Big),
@@ -140,18 +133,28 @@ fn get_endian(exif: &[u8]) -> Option<Endian> {
     }
 }
 
-// TODO: find a way to find the end of this byte range
-fn get_exif_start(file: &[u8]) -> Option<usize> {
-    get_sequence_offset(file, EXIF_MARKER)
+/// Get the EXIF bytes starting from the Endian marker
+fn get_exif_bytes(file: &[u8]) -> Option<(Endian, &[u8])> {
+    let endian = get_endian(file.get(0..2)?);
+
+    match endian {
+        Some(val) => Some((val, file)),
+        None => {
+            let exif_range = get_sequence_range(file, EXIF_MARKER)?;
+            let start = exif_range.start + ENDIAN_RANGE_FROM_EXIF_MARKER.start;
+
+            let bytes = file.get(start..)?;
+            let endian_bytes = bytes.get(0..2)?;
+            let endian = get_endian(endian_bytes)?;
+
+            Some((endian, bytes))
+        }
+    }
 }
 
-fn get_ifd_first_entry_offset(endian: &Endian, exif: &[u8]) -> Option<u32> {
-    let bytes = exif.get(IFD_OFFSET_RANGE.start..)?;
+fn get_ifd_first_entry_offset(endian: &Endian, ifd: &[u8]) -> Option<u32> {
+    let bytes = ifd.get(IFD_FIRST_ENTRY_OFFSET_RANGE_FROM_ENDIAN_MARKER)?;
     u32::from_endian_bytes(endian, bytes)
-}
-
-fn get_ifd_bytes(exif: &[u8]) -> Option<&[u8]> {
-    exif.get(ENDIAN_RANGE.start..)
 }
 
 fn parse_entry<'a>(
