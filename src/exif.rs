@@ -124,7 +124,7 @@ impl<'a> Exif<'a> {
 }
 
 fn get_endian(endian_bytes: &[u8]) -> Option<Endian> {
-    let endian = parsing::full_bytes_to_string(endian_bytes)?;
+    let endian = parsing::full_bytes_string(endian_bytes)?;
 
     match endian.as_str() {
         "MM" => Some(Endian::Big),

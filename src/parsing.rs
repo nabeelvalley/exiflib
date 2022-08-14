@@ -18,11 +18,7 @@ pub enum ExifValue<'a> {
     DoubleFloat(f64),
 }
 
-pub fn bytes_to_string(bytes: &[u8], range: Range<usize>) -> Option<String> {
-    String::from_utf8(bytes.get(range)?.to_vec()).ok()
-}
-
-pub fn full_bytes_to_string(bytes: &[u8]) -> Option<String> {
+pub fn full_bytes_string(bytes: &[u8]) -> Option<String> {
     String::from_utf8(bytes.to_vec()).ok()
 }
 
@@ -33,7 +29,7 @@ pub fn bytes_to_unsigned_byte<'a>(endian: &Endian, bytes: &'a [u8]) -> Option<Ex
 }
 
 pub fn bytes_to_ascii_string(bytes: &[u8]) -> Option<ExifValue> {
-    let value = full_bytes_to_string(bytes)?.replace("\0", "");
+    let value = full_bytes_string(bytes)?.replace("\0", "");
 
     Some(ExifValue::AsciiString(value))
 }
